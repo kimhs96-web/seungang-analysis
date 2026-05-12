@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>승강기 장애분석 시스템</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#0F2149;--blue:#1D4ED8;--sky:#3B82F6;--skylt:#93C5FD;--ice:#DBEAFE;
+  --teal:#0D7966;--teallt:#14B8A6;--amber:#F59E0B;--amberlt:#FEF3C7;
+  --green:#059669;--red:#DC2626;--redlt:#FEF2F2;
+  --dark:#1E293B;--gray:#64748B;--lgray:#E2E8F0;--offwh:#F8FAFC;--white:#FFFFFF;
+  --font:'Noto Sans KR',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+body{font-family:var(--font);background:var(--offwh);color:var(--dark);min-height:100vh}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse 80% 60% at 10% 10%,rgba(29,78,216,.06) 0%,transparent 60%),
+             radial-gradient(ellipse 60% 50% at 90% 90%,rgba(13,121,102,.05) 0%,transparent 60%)}
+header{position:relative;z-index:10;background:var(--navy);padding:0 48px;display:flex;align-items:center;justify-content:space-between;height:64px}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-mark{width:32px;height:32px;background:var(--amber);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--navy)}
+.logo-text{font-size:15px;font-weight:500;color:var(--white)}
+.logo-sub{font-size:11px;color:rgba(255,255,255,.4);font-family:var(--mono);margin-top:1px}
+.badge{font-size:11px;font-family:var(--mono);color:var(--skylt);background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.2);padding:3px 10px;border-radius:20px}
+main{position:relative;z-index:1;max-width:860px;margin:0 auto;padding:48px 24px 80px}
+.hero{text-align:center;margin-bottom:40px}
+.hero-tag{display:inline-block;font-size:11px;font-weight:500;letter-spacing:1.5px;color:var(--teallt);text-transform:uppercase;margin-bottom:14px;font-family:var(--mono)}
+.hero h1{font-size:34px;font-weight:700;line-height:1.2;color:var(--dark);margin-bottom:14px}
+.hero h1 em{font-style:normal;background:linear-gradient(135deg,var(--blue) 0%,var(--teal) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{font-size:15px;color:var(--gray);line-height:1.8;max-width:520px;margin:0 auto}
+.pipeline{display:flex;align-items:center;justify-content:center;background:var(--white);border:1px solid var(--lgray);border-radius:14px;padding:18px 24px;margin-bottom:32px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.step{display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;text-align:center}
+.step-num{width:28px;height:28px;border-radius:50%;background:var(--lgray);color:var(--gray);font-size:12px;font-weight:600;font-family:var(--mono);display:flex;align-items:center;justify-content:center;transition:all .3s}
+.step.active .step-num{background:var(--blue);color:var(--white)}
+.step.done .step-num{background:var(--green);color:var(--white)}
+.step-label{font-size:12px;color:var(--gray);font-weight:500;white-space:nowrap}
+.step.active .step-label{color:var(--blue)}
+.step.done .step-label{color:var(--green)}
+.arrow{color:var(--lgray);font-size:16px;padding:0 4px;flex-shrink:0}
+.card{background:var(--white);border:1px solid var(--lgray);border-radius:16px;padding:40px;box-shadow:0 2px 12px rgba(0,0,0,.04)}
+.dropzone{border:2px dashed var(--lgray);border-radius:12px;padding:52px 32px;text-align:center;cursor:pointer;transition:all .25s;position:relative}
+.dropzone:hover,.dropzone.over{border-color:var(--blue);background:var(--ice)}
+.dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop-icon{width:56px;height:56px;margin:0 auto 16px;background:var(--ice);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;transition:transform .25s}
+.dropzone:hover .drop-icon{transform:translateY(-3px)}
+.drop-title{font-size:16px;font-weight:600;color:var(--dark);margin-bottom:6px}
+.drop-sub{font-size:13px;color:var(--gray)}
+.drop-sub strong{color:var(--blue)}
+.file-sel{display:none;align-items:center;gap:14px;background:var(--ice);border-radius:10px;padding:14px 18px;margin-top:20px}
+.file-sel.show{display:flex}
+.file-info{flex:1}
+.fname{font-size:14px;font-weight:600;color:var(--dark)}
+.fsize{font-size:12px;color:var(--gray);margin-top:2px}
+.fremove{background:none;border:none;cursor:pointer;color:var(--gray);font-size:18px;padding:4px;border-radius:4px;transition:color .2s}
+.fremove:hover{color:var(--red)}
+.btn-go{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px 24px;margin-top:24px;background:linear-gradient(135deg,var(--blue) 0%,#1a44b8 100%);color:var(--white);border:none;border-radius:10px;font-size:15px;font-weight:600;font-family:var(--font);cursor:pointer;transition:all .2s;box-shadow:0 4px 12px rgba(29,78,216,.3)}
+.btn-go:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 20px rgba(29,78,216,.4)}
+.btn-go:disabled{opacity:.5;cursor:not-allowed;transform:none}
+/* 진행 */
+.prog-panel{display:none}
+.prog-panel.show{display:block}
+.prog-header{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.spinner{width:36px;height:36px;border-radius:50%;border:3px solid var(--lgray);border-top-color:var(--blue);animation:spin .8s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.prog-title{font-size:18px;font-weight:700;color:var(--dark)}
+.prog-msg{font-size:13px;color:var(--gray);margin-top:2px}
+.prog-bar-wrap{background:var(--lgray);border-radius:100px;height:10px;overflow:hidden;margin-bottom:6px}
+.prog-bar{height:100%;background:linear-gradient(90deg,var(--blue),var(--teallt));border-radius:100px;transition:width .3s ease;width:0%}
+.prog-steps{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+.prog-step{font-size:11px;font-family:var(--mono);padding:3px 10px;border-radius:20px;background:var(--lgray);color:var(--gray);transition:all .3s}
+.prog-step.active{background:var(--blue);color:var(--white)}
+.prog-step.done{background:var(--green);color:var(--white)}
+.warning-note{margin-top:16px;background:var(--amberlt);border:1px solid var(--amber);border-radius:10px;padding:12px 16px;font-size:13px;color:#92400E}
+/* 결과 */
+.result-panel{display:none}
+.result-panel.show{display:block}
+.result-header{display:flex;align-items:center;gap:14px;margin-bottom:24px}
+.ok-icon{width:44px;height:44px;border-radius:50%;background:rgba(5,150,105,.1);border:2px solid var(--green);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.result-title{font-size:20px;font-weight:700;color:var(--green)}
+.result-sub{font-size:13px;color:var(--gray);margin-top:2px}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.stat-card{background:var(--offwh);border:1px solid var(--lgray);border-radius:10px;padding:14px 16px;text-align:center}
+.stat-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;margin-bottom:8px;display:inline-block}
+.stat-badge.el{background:var(--ice);color:var(--blue)}
+.stat-badge.es{background:rgba(13,121,102,.1);color:var(--teal)}
+.stat-num{font-size:26px;font-weight:700;font-family:var(--mono);color:var(--dark)}
+.stat-label{font-size:11px;color:var(--gray);margin-top:2px}
+.files-list{display:flex;flex-direction:column;gap:10px;margin-bottom:24px}
+.fitem{display:flex;align-items:center;gap:14px;background:var(--offwh);border:1px solid var(--lgray);border-radius:10px;padding:14px 18px}
+.fitem-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.fitem-icon.x{background:rgba(5,150,105,.1)}
+.fitem-icon.el{background:var(--ice)}
+.fitem-icon.es{background:rgba(13,121,102,.1)}
+.fitem-info{flex:1}
+.fitem-name{font-size:14px;font-weight:600;color:var(--dark)}
+.fitem-desc{font-size:12px;color:var(--gray);margin-top:2px}
+.btn-dl{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:16px 24px;background:linear-gradient(135deg,var(--green) 0%,#047857 100%);color:var(--white);border:none;border-radius:10px;font-size:15px;font-weight:700;font-family:var(--font);cursor:pointer;transition:all .2s;box-shadow:0 4px 12px rgba(5,150,105,.3);text-decoration:none}
+.btn-dl:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(5,150,105,.4)}
+.btn-new{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px 24px;margin-top:12px;background:var(--white);color:var(--gray);border:1px solid var(--lgray);border-radius:10px;font-size:14px;font-weight:500;font-family:var(--font);cursor:pointer;transition:all .2s}
+.btn-new:hover{border-color:var(--blue);color:var(--blue)}
+/* 에러 */
+.err-panel{display:none}
+.err-panel.show{display:block}
+.err-box{background:var(--redlt);border:1px solid rgba(220,38,38,.2);border-radius:12px;padding:24px}
+.err-title{font-size:16px;font-weight:700;color:var(--red);margin-bottom:10px}
+.err-msg{font-size:13px;color:#7f1d1d;line-height:1.8;white-space:pre-wrap}
+/* 인포 */
+.info-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}
+.info-card{background:var(--white);border:1px solid var(--lgray);border-radius:12px;padding:22px;box-shadow:0 1px 4px rgba(0,0,0,.03)}
+.info-card-icon{font-size:22px;margin-bottom:10px}
+.info-card-title{font-size:14px;font-weight:700;color:var(--dark);margin-bottom:6px}
+.info-card-body{font-size:12px;color:var(--gray);line-height:1.7}
+.info-card-body li{margin-left:14px;margin-top:2px}
+@media(max-width:640px){
+  header{padding:0 16px}
+  main{padding:24px 14px 60px}
+  .hero h1{font-size:24px}
+  .pipeline{padding:14px 10px}
+  .step-label{font-size:10px}
+  .card{padding:22px}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  .info-cards{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <div class="logo-mark">승</div>
+    <div>
+      <div class="logo-text">승강기 장애분석 시스템</div>
+      <div class="logo-sub">DAEGU METRO · FACILITY OPERATION</div>
+    </div>
+  </div>
+  <div class="badge">v3.0 · Vercel Only</div>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="hero-tag">Vercel 완전 자동화 파이프라인</div>
+    <h1>엑셀 업로드 한 번으로<br><em>완성되는 장애분석 보고서</em></h1>
+    <p>장애신고조치내역 파일을 업로드하면 데이터 정제·분류·통계 분석부터<br>EL·ES 장애분석 PPT 보고서까지 자동으로 생성됩니다.</p>
+  </div>
+
+  <div class="pipeline">
+    <div class="step" id="s1"><div class="step-num">1</div><div class="step-label">파일 업로드</div></div>
+    <div class="arrow">›</div>
+    <div class="step" id="s2"><div class="step-num">2</div><div class="step-label">데이터 정제</div></div>
+    <div class="arrow">›</div>
+    <div class="step" id="s3"><div class="step-num">3</div><div class="step-label">분류·분석</div></div>
+    <div class="arrow">›</div>
+    <div class="step" id="s4"><div class="step-num">4</div><div class="step-label">보고서 생성</div></div>
+    <div class="arrow">›</div>
+    <div class="step" id="s5"><div class="step-num">5</div><div class="step-label">다운로드</div></div>
+  </div>
+
+  <div class="card">
+    <!-- 업로드 -->
+    <div id="up-sec">
+      <div class="dropzone" id="dz">
+        <input type="file" id="fi" accept=".xlsx,.xls">
+        <div class="drop-icon">📊</div>
+        <div class="drop-title">여기에 파일을 드래그하거나 클릭하세요</div>
+        <div class="drop-sub">장애신고조치내역 파일 (.xlsx, .xls) · <strong>EL구분, ES구분, EL장애, ES장애 시트 포함 필수</strong></div>
+      </div>
+      <div class="file-sel" id="fsel">
+        <div style="font-size:24px">📋</div>
+        <div class="file-info">
+          <div class="fname" id="fn"></div>
+          <div class="fsize" id="fs"></div>
+        </div>
+        <button class="fremove" id="frm">✕</button>
+      </div>
+      <button class="btn-go" id="go" disabled>⚡ 분석 시작</button>
+    </div>
+
+    <!-- 진행 -->
+    <div class="prog-panel" id="prog-sec">
+      <div class="prog-header">
+        <div class="spinner"></div>
+        <div>
+          <div class="prog-title">처리 중...</div>
+          <div class="prog-msg" id="pmsg">서버에 업로드 중</div>
+        </div>
+      </div>
+      <div class="prog-bar-wrap"><div class="prog-bar" id="pbar"></div></div>
+      <div class="prog-steps">
+        <div class="prog-step" id="ps1">① 파일 업로드</div>
+        <div class="prog-step" id="ps2">② 엑셀 정제</div>
+        <div class="prog-step" id="ps3">③ 분류·분석</div>
+        <div class="prog-step" id="ps4">④ EL 보고서</div>
+        <div class="prog-step" id="ps5">⑤ ES 보고서</div>
+        <div class="prog-step" id="ps6">⑥ ZIP 생성</div>
+      </div>
+      <div class="warning-note">
+        ⏳ 처리 시간은 파일 크기에 따라 <strong>약 10~30초</strong> 소요됩니다. 창을 닫지 마세요.
+      </div>
+    </div>
+
+    <!-- 결과 -->
+    <div class="result-panel" id="res-sec">
+      <div class="result-header">
+        <div class="ok-icon">✓</div>
+        <div>
+          <div class="result-title">분석 완료!</div>
+          <div class="result-sub" id="rsub">처리가 성공적으로 완료되었습니다.</div>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-badge el">1호선 EL</div><div class="stat-num" id="s1el">-</div><div class="stat-label">처리 건수</div></div>
+        <div class="stat-card"><div class="stat-badge el">2호선 EL</div><div class="stat-num" id="s2el">-</div><div class="stat-label">처리 건수</div></div>
+        <div class="stat-card"><div class="stat-badge es">1호선 ES</div><div class="stat-num" id="s1es">-</div><div class="stat-label">처리 건수</div></div>
+        <div class="stat-card"><div class="stat-badge es">2호선 ES</div><div class="stat-num" id="s2es">-</div><div class="stat-label">처리 건수</div></div>
+      </div>
+      <div class="files-list">
+        <div class="fitem"><div class="fitem-icon x">📊</div><div class="fitem-info"><div class="fitem-name">장애신고_처리완료.xlsx</div><div class="fitem-desc">정제된 데이터 · 4개 시트 (1호선EL, 1호선ES, 2호선EL, 2호선ES)</div></div></div>
+        <div class="fitem"><div class="fitem-icon el">📑</div><div class="fitem-info"><div class="fitem-name">EL_장애분석_보고서.pptx</div><div class="fitem-desc">엘리베이터 장애분석 보고서 · 8슬라이드 (표지~결론)</div></div></div>
+        <div class="fitem"><div class="fitem-icon es">📑</div><div class="fitem-info"><div class="fitem-name">ES_장애분석_보고서.pptx</div><div class="fitem-desc">에스컬레이터 장애분석 보고서 · 8슬라이드 (표지~결론)</div></div></div>
+      </div>
+      <a class="btn-dl" id="dl-btn" href="#" download="승강기_장애분석_결과.zip">⬇ 전체 결과 다운로드 (ZIP)</a>
+      <button class="btn-new" onclick="reset()">↩ 새 파일 분석하기</button>
+    </div>
+
+    <!-- 에러 -->
+    <div class="err-panel" id="err-sec">
+      <div class="err-box">
+        <div class="err-title">⚠ 처리 중 오류가 발생했습니다</div>
+        <div class="err-msg" id="emsg"></div>
+      </div>
+      <button class="btn-new" style="margin-top:16px" onclick="reset()">↩ 다시 시도하기</button>
+    </div>
+  </div>
+
+  <div class="info-cards">
+    <div class="info-card"><div class="info-card-icon">🔧</div><div class="info-card-title">자동 데이터 정제</div><div class="info-card-body"><ul><li>기타/인적 장애 자동 제거</li><li>18개 키워드 조치내역 필터링</li><li>EL/ES/호선 자동 분류</li><li>장애종류 우선순위 자동 배정</li></ul></div></div>
+    <div class="info-card"><div class="info-card-icon">📊</div><div class="info-card-title">자동 통계 분석</div><div class="info-card-body"><ul><li>옥내/옥외 자동 분류</li><li>월별·역사별·장치별 집계</li><li>평균 복구시간 산출</li><li>반복 장애 자동 탐지</li></ul></div></div>
+    <div class="info-card"><div class="info-card-icon">📑</div><div class="info-card-title">보고서 자동 생성</div><div class="info-card-body"><ul><li>EL·ES 분리 보고서 생성</li><li>차트·통계 자동 삽입</li><li>장치별 원인·대책 기술</li><li>사장님 보고용 디자인</li></ul></div></div>
+  </div>
+</main>
+
+<script>
+let selFile=null, startTime=null;
+const $=id=>document.getElementById(id);
+
+// ── 파일 처리 ──
+function setFile(f){
+  if(!f||!f.name.match(/\.(xlsx|xls)$/i)){alert('.xlsx 파일을 선택하세요');return}
+  selFile=f;
+  $('fn').textContent=f.name;
+  $('fs').textContent=fmt(f.size);
+  $('fsel').classList.add('show');
+  $('go').disabled=false;
+}
+function fmt(b){return b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB'}
+$('fi').onchange=e=>{if(e.target.files[0])setFile(e.target.files[0])};
+$('frm').onclick=e=>{e.stopPropagation();selFile=null;$('fi').value='';$('fsel').classList.remove('show');$('go').disabled=true};
+const dz=$('dz');
+dz.ondragover=e=>{e.preventDefault();dz.classList.add('over')};
+dz.ondragleave=()=>dz.classList.remove('over');
+dz.ondrop=e=>{e.preventDefault();dz.classList.remove('over');if(e.dataTransfer.files[0])setFile(e.dataTransfer.files[0])};
+
+// ── 스텝 ──
+function setStep(n){
+  for(let i=1;i<=5;i++){
+    const el=$('s'+i);
+    el.className='step'+(i<n?' done':i===n?' active':'');
+  }
+}
+function setPStep(n){
+  for(let i=1;i<=6;i++){
+    const el=$('ps'+i);
+    if(!el)continue;
+    el.className='prog-step'+(i<n?' done':i===n?' active':'');
+  }
+}
+
+// ── 섹션 전환 ──
+function showSec(w){
+  $('up-sec').style.display=w==='up'?'block':'none';
+  $('prog-sec').classList.toggle('show',w==='prog');
+  $('res-sec').classList.toggle('show',w==='res');
+  $('err-sec').classList.toggle('show',w==='err');
+}
+
+// ── 분석 시작 ──
+$('go').onclick=async()=>{
+  if(!selFile)return;
+  startTime=Date.now();
+  setStep(2); showSec('prog');
+  $('pbar').style.width='10%'; $('pmsg').textContent='서버에 업로드 중...'; setPStep(1);
+
+  try{
+    // 파일을 FormData로 전송
+    const form=new FormData();
+    form.append('file', selFile);
+
+    $('pbar').style.width='25%'; $('pmsg').textContent='서버에서 처리 중...'; setPStep(2); setStep(3);
+
+    // 단일 요청 - 서버에서 전체 처리 후 ZIP 반환
+    const resp=await fetch('/api/process',{method:'POST',body:form});
+
+    $('pbar').style.width='90%'; $('pmsg').textContent='결과 파일 준비 중...'; setPStep(5); setStep(4);
+
+    if(!resp.ok){
+      const err=await resp.json().catch(()=>({error:resp.statusText}));
+      throw new Error(err.error||`서버 오류 (${resp.status})`);
+    }
+
+    // stats 헤더에서 추출
+    const statsRaw=resp.headers.get('X-Stats');
+    let stats={};
+    try{stats=JSON.parse(statsRaw||'{}')}catch{}
+
+    // ZIP blob 생성
+    const blob=await resp.blob();
+    const url=URL.createObjectURL(blob);
+
+    $('pbar').style.width='100%'; setPStep(6); setStep(5);
+
+    // 결과 표시
+    $('s1el').textContent=(stats['1호선EL']||0)+'건';
+    $('s2el').textContent=(stats['2호선EL']||0)+'건';
+    $('s1es').textContent=(stats['1호선ES']||0)+'건';
+    $('s2es').textContent=(stats['2호선ES']||0)+'건';
+    const total=Object.values(stats).reduce((a,b)=>a+b,0);
+    const sec=Math.floor((Date.now()-startTime)/1000);
+    $('rsub').textContent=`총 ${total}건 분석 완료 · 처리시간 ${sec}초`;
+
+    $('dl-btn').href=url;
+    showSec('res');
+
+  }catch(e){
+    $('emsg').textContent=e.message||String(e);
+    showSec('err');
+  }
+};
+
+// ── 리셋 ──
+function reset(){
+  selFile=null; $('fi').value='';
+  $('fsel').classList.remove('show'); $('go').disabled=true;
+  $('pbar').style.width='0%';
+  setStep(1); showSec('up');
+}
+
+// ── 초기화 ──
+showSec('up'); setStep(1);
+</script>
+</body>
+</html>
