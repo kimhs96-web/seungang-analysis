@@ -2,7 +2,7 @@
 Vercel Python Serverless - 승강시설 장애분석 API
 2개 파일(장애신고 + 장애분류) 업로드 처리
 """
-import sys, os, io, json, zipfile, traceback, base64
+import sys, os, io, json, zipfile, traceback
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -18,7 +18,35 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split('?')[0]
         if path == '/api/health':
-            self._json(200, {'status': 'ok', 'version': '3.0'})
+            # 패키지 import 가능 여부 진단
+            diag = {}
+            try:
+                import openpyxl
+                diag['openpyxl'] = openpyxl.__version__
+            except Exception as e:
+                diag['openpyxl'] = f'ERROR: {e}'
+            try:
+                import pptx
+                diag['python-pptx'] = pptx.__version__
+            except Exception as e:
+                diag['python-pptx'] = f'ERROR: {e}'
+            try:
+                from processor import run_pipeline
+                diag['processor'] = 'OK'
+            except Exception as e:
+                diag['processor'] = f'ERROR: {e}'
+            try:
+                from el_report import build_el_report
+                diag['el_report'] = 'OK'
+            except Exception as e:
+                diag['el_report'] = f'ERROR: {e}'
+            try:
+                from es_report import build_es_report
+                diag['es_report'] = 'OK'
+            except Exception as e:
+                diag['es_report'] = f'ERROR: {e}'
+
+            self._json(200, {'status': 'ok', 'version': '3.1', 'diag': diag})
         else:
             self._json(404, {'error': 'not found'})
 
@@ -35,9 +63,7 @@ class handler(BaseHTTPRequestHandler):
             cl = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(cl)
 
-            # multipart 파싱
             files = self._parse_multipart(body, ct)
-
             fault_bytes = files.get('fault')
             cls_bytes   = files.get('cls')
 
@@ -50,13 +76,10 @@ class handler(BaseHTTPRequestHandler):
             from el_report  import build_el_report
             from es_report  import build_es_report
 
-            def cb(msg, pct): pass  # Serverless는 진행상황 전달 불가
-
-            excel_bytes, stats = run_pipeline(fault_bytes, cls_bytes, cb)
+            excel_bytes, stats = run_pipeline(fault_bytes, cls_bytes)
             el_bytes = build_el_report(stats)
             es_bytes = build_es_report(stats)
 
-            # ZIP
             buf = io.BytesIO()
             with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
                 zf.writestr('장애신고_처리완료.xlsx',  excel_bytes)
@@ -75,10 +98,11 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(zip_bytes)
 
         except Exception as e:
-            self._json(500, {'error': str(e), 'detail': traceback.format_exc()})
+            tb = traceback.format_exc()
+            print(f"[ERROR]\n{tb}", flush=True)
+            self._json(500, {'error': str(e), 'detail': tb})
 
     def _parse_multipart(self, body, ct):
-        """multipart/form-data 파싱 → {field_name: bytes}"""
         files = {}
         boundary = None
         for part in ct.split(';'):
@@ -88,7 +112,6 @@ class handler(BaseHTTPRequestHandler):
                 break
         if not boundary:
             return files
-
         delimiter = ('--' + boundary).encode()
         parts = body.split(delimiter)
         for part in parts[1:]:
@@ -97,8 +120,6 @@ class handler(BaseHTTPRequestHandler):
             header_raw, data = part.split(b'\r\n\r\n', 1)
             data = data.rstrip(b'\r\n--')
             header_str = header_raw.decode('utf-8', errors='replace')
-
-            # field name 추출
             name = None
             for line in header_str.split('\r\n'):
                 if 'Content-Disposition' in line:
