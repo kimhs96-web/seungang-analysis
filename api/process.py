@@ -1,7 +1,8 @@
 """
 Vercel Python Serverless - Flask 기반
+파일 전송: base64 JSON 방식 (multipart 대신)
 """
-import sys, os, io, json, zipfile, traceback
+import sys, os, io, json, zipfile, traceback, base64
 from flask import Flask, request, jsonify, Response
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -35,21 +36,26 @@ def health():
             diag[name] = 'OK'
         except Exception as e:
             diag[name] = f'ERROR: {e}'
-    return jsonify({'status': 'ok', 'version': '3.2', 'diag': diag})
+    return jsonify({'status': 'ok', 'version': '3.3', 'diag': diag})
 
 @app.route('/api/process', methods=['POST'])
 def process():
     try:
-        fault_file = request.files.get('fault')
-        cls_file   = request.files.get('cls')
+        # base64 JSON 방식으로 수신
+        data = request.get_json(force=True, silent=True)
+        if not data:
+            return jsonify({'error': '요청 데이터가 없습니다'}), 400
 
-        if not fault_file:
+        fault_b64 = data.get('fault')
+        cls_b64   = data.get('cls')
+
+        if not fault_b64:
             return jsonify({'error': '장애신고 파일이 없습니다'}), 400
-        if not cls_file:
+        if not cls_b64:
             return jsonify({'error': '장애분류 파일이 없습니다'}), 400
 
-        fault_bytes = fault_file.read()
-        cls_bytes   = cls_file.read()
+        fault_bytes = base64.b64decode(fault_b64)
+        cls_bytes   = base64.b64decode(cls_b64)
 
         from processor import run_pipeline
         from el_report  import build_el_report
@@ -67,11 +73,12 @@ def process():
         buf.seek(0)
         zip_bytes = buf.read()
 
-        resp = Response(zip_bytes, status=200, mimetype='application/zip')
-        resp.headers['Content-Disposition'] = 'attachment; filename="result.zip"'
-        resp.headers['Content-Length']      = str(len(zip_bytes))
-        resp.headers['X-Stats']             = json.dumps(stats, ensure_ascii=False)
-        return resp
+        # ZIP을 base64로 반환
+        zip_b64 = base64.b64encode(zip_bytes).decode('utf-8')
+        return jsonify({
+            'zip':   zip_b64,
+            'stats': stats
+        })
 
     except Exception as e:
         tb = traceback.format_exc()

@@ -428,24 +428,39 @@ async function startAnalysis() {
   }, 1200);
 
   try {
-    const form = new FormData();
-    form.append('fault', files.fault);
-    form.append('cls',   files.cls);
+    // 파일을 base64로 변환
+    const toBase64 = f => new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload  = () => res(r.result.split(',')[1]);
+      r.onerror = rej;
+      r.readAsDataURL(f);
+    });
 
-    const resp = await fetch('/api/process', { method: 'POST', body: form });
+    const [faultB64, clsB64] = await Promise.all([
+      toBase64(files.fault),
+      toBase64(files.cls),
+    ]);
+
+    const resp = await fetch('/api/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fault: faultB64, cls: clsB64 }),
+    });
 
     clearInterval(anim);
 
+    const respData = await resp.json().catch(() => ({}));
+
     if (!resp.ok) {
-      const d = await resp.json().catch(() => ({ error: resp.statusText }));
-      throw new Error(d.error || `서버 오류 (${resp.status})`);
+      const err = new Error(respData.error || `서버 오류 (${resp.status})`);
+      err.detail = respData.detail || '';
+      throw err;
     }
 
-    // stats 추출
-    let stats = {};
-    try { stats = JSON.parse(resp.headers.get('X-Stats') || '{}'); } catch {}
-
-    const blob = await resp.blob();
+    // stats 및 ZIP 추출
+    const stats = respData.stats || {};
+    const zipBytes = Uint8Array.from(atob(respData.zip), c => c.charCodeAt(0));
+    const blob = new Blob([zipBytes], { type: 'application/zip' });
     const url  = URL.createObjectURL(blob);
 
     // 결과 표시
@@ -467,7 +482,9 @@ async function startAnalysis() {
 
   } catch (e) {
     clearInterval(anim);
-    document.getElementById('emsg').textContent = e.message || String(e);
+    const msg    = e.message || String(e);
+    const detail = e.detail  || '';
+    document.getElementById('emsg').textContent = msg + (detail ? '\n\n' + detail : '');
     show('err');
   }
 }
